@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import SessionLocal
-import models, schemas
+import schemas
+from services import book_service
 
 router = APIRouter()
 
-# DB session
+
 def get_db():
     db = SessionLocal()
     try:
@@ -14,17 +15,11 @@ def get_db():
         db.close()
 
 
-# GET all books
 @router.get("/books", response_model=list[schemas.BookResponse])
 def get_books(db: Session = Depends(get_db)):
-    return db.query(models.Book).all()
+    return book_service.get_all_books(db)
 
 
-# POST new book
 @router.post("/books", response_model=schemas.BookResponse)
 def add_book(book: schemas.BookCreate, db: Session = Depends(get_db)):
-    new_book = models.Book(**book.dict())
-    db.add(new_book)
-    db.commit()
-    db.refresh(new_book)
-    return new_book
+    return book_service.create_book(db, book)
