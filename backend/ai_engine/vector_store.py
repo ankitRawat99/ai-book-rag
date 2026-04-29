@@ -1,6 +1,6 @@
 import chromadb
 from chromadb.config import Settings
-from embeddings import get_embedding
+from ai_engine.embeddings import get_embedding
 
 # persistent chroma client
 client = chromadb.Client(

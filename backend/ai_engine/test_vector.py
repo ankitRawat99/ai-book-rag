@@ -1,4 +1,4 @@
-from vector_store import add_book_embedding, search_similar
+from backend.ai_engine.vector_store import add_book_embedding, search_similar
 
 # add sample
 add_book_embedding(1, "Atomic Habits by James Clear")
