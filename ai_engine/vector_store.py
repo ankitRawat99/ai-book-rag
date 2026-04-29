@@ -1,8 +1,13 @@
 import chromadb
+from chromadb.config import Settings
 from embeddings import get_embedding
 
-# initialize chroma
-client = chromadb.Client()
+# persistent chroma client
+client = chromadb.Client(
+    Settings(
+        persist_directory="chroma_db"
+    )
+)
 
 collection = client.get_or_create_collection(name="books")
 
