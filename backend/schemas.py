@@ -13,3 +13,18 @@ class BookResponse(BookCreate):
 
     class Config:
         from_attributes = True
+
+
+class BookSuggestion(BookResponse):
+    score: float
+    match_type: str
+    reason: str
+
+
+class BookSuggestionResponse(BaseModel):
+    query: str
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+    suggestions: list[BookSuggestion]
