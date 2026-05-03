@@ -46,6 +46,9 @@ def seed_books(pages: int = 50, include_details: bool = False, rebuild_index: bo
                 description=book_data["description"],
                 rating=book_data["rating"],
                 url=book_data["url"],
+                image=book_data.get("image", ""),
+                publish_year=book_data.get("publish_year"),
+                genre=book_data.get("genre", "General"),
             )
             db.add(book)
             created_count += 1

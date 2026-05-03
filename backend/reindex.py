@@ -1,31 +1,44 @@
-from database import SessionLocal
 import models
-from ai_engine.vector_store import add_book_embedding, build_book_document, clean_author
+from ai_engine.vector_store import (
+    add_book_embedding,
+    build_book_document,
+    build_book_metadata,
+    clean_author,
+)
+from database import SessionLocal
 
-db = SessionLocal()
 
-books = db.query(models.Book).all()
-seen = set()
+def rebuild_index():
+    db = SessionLocal()
+    indexed = 0
+    seen = set()
 
-for book in books:
-    key = f"{book.title}-{book.author}"
+    try:
+        books = db.query(models.Book).all()
 
-    if key in seen:
-        continue
+        for book in books:
+            key = f"{book.title}-{book.author}"
 
-    seen.add(key)
+            if key in seen:
+                continue
 
-    book.author = clean_author(book.author)
-    add_book_embedding(
-        book.id,
-        build_book_document(book),
-        {
-            "title": book.title,
-            "author": clean_author(book.author),
-            "rating": book.rating or 0,
-            "url": book.url or "",
-        },
-    )
+            seen.add(key)
 
-db.commit()
-db.close()
+            book.author = clean_author(book.author)
+            add_book_embedding(
+                book.id,
+                build_book_document(book),
+                build_book_metadata(book),
+            )
+            indexed += 1
+
+        db.commit()
+    finally:
+        db.close()
+
+    print(f"Indexed {indexed} books.")
+    return indexed
+
+
+if __name__ == "__main__":
+    rebuild_index()

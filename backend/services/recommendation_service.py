@@ -3,57 +3,114 @@ from sqlalchemy.orm import Session
 
 import models
 from ai_engine.vector_store import clean_author, search_similar
+from services.data_quality import clean_rating, normalize_author, normalize_image_url
 
 
 def _normalize(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
+def _split_terms(value: str) -> set[str]:
+    return {term for term in _normalize(value).replace("-", " ").split() if len(term) > 2}
+
+
+GENRE_INTENTS = {
+    "Sci-Fi": {"space", "alien", "future", "futuristic", "robot", "technology", "science", "dystopian"},
+    "Fantasy": {"magic", "dragon", "quest", "myth", "kingdom", "epic", "wizard"},
+    "Mystery": {"mystery", "detective", "crime", "clue", "thriller", "suspense"},
+    "Romance": {"love", "romance", "relationship", "heartbreak", "marriage"},
+    "Business": {"startup", "business", "leadership", "management", "entrepreneur", "money"},
+    "Self Help": {"habit", "productivity", "mindset", "self", "confidence", "growth"},
+    "History": {"history", "war", "ancient", "empire", "historical"},
+    "Biography": {"biography", "memoir", "life", "autobiography"},
+    "Travel": {"travel", "journey", "adventure", "country", "world"},
+    "Health": {"health", "fitness", "wellness", "nutrition"},
+    "Philosophy": {"philosophy", "meaning", "ethics", "wisdom", "thought"},
+}
+
+
+def _intent_genres(query: str) -> set[str]:
+    terms = _split_terms(query)
+    return {
+        genre
+        for genre, keywords in GENRE_INTENTS.items()
+        if terms & keywords
+    }
+
+
 def _reason(book: models.Book, match_type: str, query: str) -> str:
     description = (book.description or "").strip()
+    genre = book.genre or "General"
+    year = f", first published in {book.publish_year}" if book.publish_year else ""
+    rating = clean_rating(book.rating, book.title, book.author)
 
     if match_type == "title":
-        return "Title closely matches the search text."
+        return f"Strong title or author match in {genre}{year}. Reader rating: {rating:.1f}/5."
+
+    if match_type == "genre":
+        return f"Good fit for readers asking for {genre}. Reader rating: {rating:.1f}/5."
 
     if description and description.lower() != "no description available":
-        return description[:220]
+        sentence = description.split(".")[0].strip()
+        if 45 <= len(sentence) <= 220:
+            return sentence + "."
+        return description[:220].strip()
 
-    return f"Relevant match for: {query}"
+    return f"Relevant semantic match for '{query}' in {genre}. Reader rating: {rating:.1f}/5."
 
 
 def _serialize_book(book: models.Book, score: float, match_type: str, query: str):
-    author = clean_author(book.author)
+    author = normalize_author(clean_author(book.author), book.title)
 
     return {
         "id": book.id,
         "title": book.title,
-        "author": author if author != "Unknown" else "author unavailable",
+        "author": author,
         "description": book.description,
-        "rating": book.rating,
+        "rating": clean_rating(book.rating, book.title, author),
         "url": book.url,
+        "image": normalize_image_url(book.image, book.url, book.title),
+        "publish_year": book.publish_year,
+        "genre": book.genre or "General",
         "score": round(score, 4),
         "match_type": match_type,
         "reason": _reason(book, match_type, query),
     }
 
 
-def _title_score(title: str, query: str) -> float:
-    title_norm = _normalize(title)
+def _text_score(book: models.Book, query: str) -> tuple[float, str]:
+    title_norm = _normalize(book.title)
     query_norm = _normalize(query)
+    author_norm = _normalize(book.author)
+    genre_norm = _normalize(book.genre)
+    haystack_terms = _split_terms(" ".join([
+        book.title or "",
+        book.author or "",
+        book.genre or "",
+        book.description or "",
+    ]))
+    query_terms = _split_terms(query)
 
     if title_norm == query_norm:
-        return 1.0
+        return 1.0, "title"
 
-    if query_norm in title_norm:
-        return 0.92
+    if query_norm and query_norm in title_norm:
+        return 0.94, "title"
 
-    query_terms = set(query_norm.split())
-    title_terms = set(title_norm.split())
+    if query_norm and query_norm in author_norm:
+        return 0.9, "title"
+
+    if query_norm and query_norm == genre_norm:
+        return 0.86, "genre"
+
+    if book.genre in _intent_genres(query):
+        return 0.82, "genre"
+
     if not query_terms:
-        return 0.0
+        return 0.0, "context"
 
-    overlap = len(query_terms & title_terms) / len(query_terms)
-    return min(0.88, 0.45 + overlap * 0.35)
+    overlap = len(query_terms & haystack_terms) / len(query_terms)
+    return min(0.84, 0.38 + overlap * 0.42), "context"
 
 
 def _semantic_score(distance: float | None) -> float:
@@ -61,6 +118,20 @@ def _semantic_score(distance: float | None) -> float:
         return 0.5
 
     return max(0.0, min(1.0, 1.0 / (1.0 + distance)))
+
+
+def _combined_score(base_score: float, book: models.Book) -> float:
+    rating = clean_rating(book.rating, book.title, book.author)
+    rating_bonus = max(0.0, (rating - 3.5) / 10)
+    metadata_bonus = 0.0
+    if book.publish_year:
+        metadata_bonus += 0.015
+    if book.image and not str(book.image).startswith("data:image"):
+        metadata_bonus += 0.015
+    if book.description and book.description.lower() != "no description available":
+        metadata_bonus += 0.02
+
+    return min(1.0, base_score + rating_bonus + metadata_bonus)
 
 
 def suggest_books(db: Session, query: str, limit: int = 10, offset: int = 0):
@@ -76,17 +147,36 @@ def suggest_books(db: Session, query: str, limit: int = 10, offset: int = 0):
             or_(
                 models.Book.title.ilike(f"%{query}%"),
                 models.Book.author.ilike(f"%{query}%"),
+                models.Book.genre.ilike(f"%{query}%"),
             )
         )
         .limit(fetch_size)
         .all()
     )
 
+    intent_genres = _intent_genres(query)
+    if intent_genres:
+        for book in (
+            db.query(models.Book)
+            .filter(models.Book.genre.in_(intent_genres))
+            .order_by(models.Book.rating.desc(), models.Book.title)
+            .limit(fetch_size)
+            .all()
+        ):
+            base_score, match_type = _text_score(book, query)
+            suggestions_by_id[book.id] = _serialize_book(
+                book,
+                _combined_score(base_score, book),
+                match_type,
+                query,
+            )
+
     for book in title_matches:
+        base_score, match_type = _text_score(book, query)
         suggestions_by_id[book.id] = _serialize_book(
             book,
-            _title_score(book.title, query),
-            "title",
+            _combined_score(base_score, book),
+            match_type,
             query,
         )
 
@@ -102,15 +192,16 @@ def suggest_books(db: Session, query: str, limit: int = 10, offset: int = 0):
         semantic_score = _semantic_score(
             distances[index] if index < len(distances) else None
         )
+        combined_score = _combined_score(semantic_score, book)
         existing = suggestions_by_id.get(book.id)
 
-        if existing and existing["score"] >= semantic_score:
+        if existing and existing["score"] >= combined_score:
             existing["match_type"] = "title+context"
             continue
 
         suggestions_by_id[book.id] = _serialize_book(
             book,
-            semantic_score,
+            combined_score,
             "context",
             query,
         )

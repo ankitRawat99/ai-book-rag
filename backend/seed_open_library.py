@@ -4,6 +4,7 @@ import models
 from ai_engine.vector_store import add_book_embedding, build_book_document, clean_author
 from database import SessionLocal
 from scraper.open_library_scraper import DEFAULT_SUBJECTS, scrape_open_library_books
+from services.data_quality import build_key_points_list, build_summary_text, dump_key_points
 
 
 def _sync_embedding(book):
@@ -46,6 +47,8 @@ def seed_open_library_books(
                     if field == "author":
                         value = clean_author(value)
                     setattr(existing_book, field, value)
+                existing_book.ai_summary = build_summary_text(existing_book)
+                existing_book.key_points = dump_key_points(build_key_points_list(existing_book))
                 updated_count += 1
                 continue
 
@@ -55,9 +58,14 @@ def seed_open_library_books(
                 description=book_data["description"],
                 rating=book_data["rating"],
                 url=book_data["url"],
+                image=book_data.get("image", ""),
+                publish_year=book_data.get("publish_year"),
+                genre=book_data.get("genre", "General"),
             )
             db.add(book)
             db.flush()
+            book.ai_summary = build_summary_text(book)
+            book.key_points = dump_key_points(build_key_points_list(book))
             existing_by_url[book.url] = book
             created_count += 1
 

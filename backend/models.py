@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Float, Integer, String, Text
 from database import Base
+
 
 class Book(Base):
     __tablename__ = "books"
@@ -10,4 +11,8 @@ class Book(Base):
     description = Column(String)
     rating = Column(Float)
     url = Column(String)
-    
+    image = Column(String)
+    publish_year = Column(Integer)
+    genre = Column(String)
+    ai_summary = Column(Text)
+    key_points = Column(Text)

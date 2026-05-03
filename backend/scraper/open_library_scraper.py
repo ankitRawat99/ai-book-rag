@@ -1,6 +1,7 @@
 from urllib.parse import quote
 
 import requests
+from services.data_quality import clean_rating, normalize_author, normalize_image_url
 
 OPEN_LIBRARY_BASE_URL = "https://openlibrary.org"
 DEFAULT_SUBJECTS = [
@@ -21,6 +22,24 @@ DEFAULT_SUBJECTS = [
     "health",
 ]
 
+GENRE_LABELS = {
+    "fiction": "Fiction",
+    "science_fiction": "Sci-Fi",
+    "fantasy": "Fantasy",
+    "history": "History",
+    "biography": "Biography",
+    "business": "Business",
+    "psychology": "Psychology",
+    "self_help": "Self Help",
+    "science": "Science",
+    "travel": "Travel",
+    "mystery": "Mystery",
+    "romance": "Romance",
+    "philosophy": "Philosophy",
+    "technology": "Technology",
+    "health": "Health",
+}
+
 HEADERS = {
     "User-Agent": "ai-book-rag local learning project",
 }
@@ -29,7 +48,7 @@ HEADERS = {
 def _format_author(work: dict) -> str:
     authors = work.get("authors") or []
     names = [author.get("name") for author in authors if author.get("name")]
-    return ", ".join(names[:3]) if names else "Unknown"
+    return normalize_author(", ".join(names[:3]), work.get("title"))
 
 
 def _format_description(work: dict, subject: str) -> str:
@@ -46,6 +65,14 @@ def _format_description(work: dict, subject: str) -> str:
 def _format_url(work: dict) -> str:
     key = work.get("key")
     return f"{OPEN_LIBRARY_BASE_URL}{key}" if key else OPEN_LIBRARY_BASE_URL
+
+
+def _format_image(work: dict) -> str:
+    cover_id = work.get("cover_id")
+    if cover_id:
+        return f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
+
+    return normalize_image_url("", title=work.get("title"))
 
 
 def scrape_open_library_books(
@@ -75,8 +102,11 @@ def scrape_open_library_books(
                     "title": title,
                     "author": _format_author(work),
                     "description": _format_description(work, subject),
-                    "rating": 0.0,
+                    "rating": clean_rating(0.0, title, _format_author(work)),
                     "url": _format_url(work),
+                    "image": _format_image(work),
+                    "publish_year": work.get("first_publish_year"),
+                    "genre": GENRE_LABELS.get(subject, subject.replace("_", " ").title()),
                 }
             )
 
