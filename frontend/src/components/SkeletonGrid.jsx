@@ -1,16 +1,20 @@
-export default function SkeletonGrid({ count = 8 }) {
+export default function SkeletonGrid({ count = 12 }) {
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-3 gap-3 sm:gap-5 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {Array.from({ length: count }).map((_, index) => (
-        <div key={index} className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1a1a]">
-          <div className="aspect-[2/3] animate-pulse bg-gray-200 dark:bg-gray-800" />
-          <div className="space-y-3 p-4">
-            <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-            <div className="h-4 w-full animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-            <div className="h-3 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-          </div>
+        <div key={index} className="w-full">
+          <div
+            className="w-full rounded-md animate-pulse"
+            style={{
+              paddingBottom: "150%",
+              background: "linear-gradient(135deg, #e2e8f0 25%, #cbd5e1 50%, #e2e8f0 75%)",
+              backgroundSize: "200% 100%",
+              animation: `pulse-book 1.6s ease-in-out ${index * 0.06}s infinite`,
+            }}
+          />
         </div>
       ))}
     </div>
   );
 }
+

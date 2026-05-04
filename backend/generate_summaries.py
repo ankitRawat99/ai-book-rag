@@ -39,12 +39,12 @@ def generate_ai_summary(book) -> str:
     
     context = "\n".join(context_parts)
     
-    # Create a focused prompt for better summaries
-    prompt = f"""Write a compelling 3-4 sentence summary for this book. Focus on what makes it unique and valuable to readers.
+    prompt = f"""Write a grounded 3-5 line book insight. Avoid generic praise and do not invent plot details.
 
 {context}
 
-Summary (be specific, engaging, and informative):"""
+Output should explain what the book actually covers, teaches, or argues. Prefer bullet points if useful.
+Summary:"""
 
     try:
         summarizer = get_summarizer()
@@ -53,15 +53,13 @@ Summary (be specific, engaging, and informative):"""
             max_length=150,
             min_length=40,
             num_return_sequences=1,
-            do_sample=True,
-            temperature=0.7,
+            do_sample=False,
         )
         
         summary = result[0]["generated_text"].strip()
         
         # Validate summary quality
-        if len(summary) < 30 or summary.lower().startswith(("this is", "this book is")):
-            # Fallback to template-based summary
+        if len(summary) < 40 or any(term in summary.lower() for term in ["compelling", "notable contribution", "quality content"]):
             return build_summary_text(book)
         
         return summary

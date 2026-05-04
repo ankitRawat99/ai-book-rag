@@ -8,17 +8,17 @@ from services.recommendation_service import suggest_books
 from services.data_quality import build_key_points_list, build_summary_text, normalize_author
 
 _generator = None
+_generator_model = None
 
 
-def _get_generator():
-    global _generator
+def _get_generator(preferred_model: str | None = None):
+    global _generator, _generator_model
 
-    if _generator is None:
-        _generator = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-base",
-            model_kwargs={"local_files_only": True},
-        )
+    model_name = preferred_model or os.getenv("HUGGINGFACE_TEXT_MODEL") or "google/flan-t5-base"
+
+    if _generator is None or _generator_model != model_name:
+        _generator = pipeline("text2text-generation", model=model_name)
+        _generator_model = model_name
 
     return _generator
 
@@ -107,8 +107,40 @@ def _format_ranked_answer(query: str, books: list[dict]) -> str:
 
 
 def _looks_like_bad_generation(answer: str) -> bool:
-    bad_markers = ["Relevance distance", "Retrieved book records", "Book 1:"]
-    return not answer or any(marker in answer for marker in bad_markers)
+    bad_markers = [
+        "Relevance distance",
+        "Retrieved book records",
+        "Book 1:",
+        "compelling",
+        "notable contribution",
+        "quality content",
+    ]
+    normalized = (answer or "").strip()
+    return len(normalized) < 40 or any(marker.lower() in normalized.lower() for marker in bad_markers)
+
+
+def _run_text_model(prompt: str, max_length: int, min_length: int) -> str:
+    models = [
+        os.getenv("HUGGINGFACE_TEXT_MODEL") or "google/flan-t5-base",
+        os.getenv("HUGGINGFACE_FALLBACK_MODEL") or "google/flan-t5-small",
+    ]
+
+    for model_name in dict.fromkeys(models):
+        try:
+            response = _get_generator(model_name)(
+                prompt,
+                max_length=max_length,
+                min_length=min_length,
+                num_return_sequences=1,
+                do_sample=False,
+            )
+            answer = response[0]["generated_text"].strip()
+            if not _looks_like_bad_generation(answer):
+                return answer
+        except Exception:
+            continue
+
+    return ""
 
 
 def _generate_llm_answer(query: str, context: str) -> str:
@@ -126,16 +158,7 @@ Provide 2-3 book recommendations from above. For each:
 
 Recommendations:"""
 
-    response = _get_generator()(
-        prompt,
-        max_length=200,
-        min_length=50,
-        num_return_sequences=1,
-        do_sample=True,
-        temperature=0.7,
-    )
-
-    return response[0]["generated_text"].strip()
+    return _run_text_model(prompt, max_length=220, min_length=55)
 
 
 def generate_answer(query: str):
@@ -230,24 +253,18 @@ def generate_book_answer(book, question: str) -> str:
     if os.getenv("USE_LLM_ANSWER") != "1":
         return fallback_answer
 
-    prompt = f"""Answer this question about a book using only the provided information.
+    prompt = f"""You are a precise book assistant. Use only the provided fields. Avoid generic praise.
 
 Book: {book.title} by {normalize_author(book.author, book.title)}
 Genre: {book.genre or 'General'}
 Rating: {float(book.rating or 0):.1f}/5
 Summary: {book.ai_summary or build_summary_text(book)}
+Key Points: {" | ".join(build_key_points_list(book))}
 
 Question: {question}
 
-Answer (2-3 sentences, factual, helpful):"""
+Answer in 3-5 short lines or bullets. Explain what the book actually teaches, argues, or covers. If the data is limited, say what is known instead of inventing details:"""
 
-    answer = _get_generator()(
-        prompt,
-        max_length=120,
-        min_length=20,
-        num_return_sequences=1,
-        do_sample=True,
-        temperature=0.7,
-    )[0]["generated_text"].strip()
+    answer = _run_text_model(prompt, max_length=170, min_length=35)
 
     return fallback_answer if _looks_like_bad_generation(answer) else answer

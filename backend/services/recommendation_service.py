@@ -89,6 +89,7 @@ def _text_score(book: models.Book, query: str) -> tuple[float, str]:
         book.genre or "",
         book.description or "",
     ]))
+    title_author_terms = _split_terms(" ".join([book.title or "", book.author or ""]))
     query_terms = _split_terms(query)
 
     if title_norm == query_norm:
@@ -99,6 +100,13 @@ def _text_score(book: models.Book, query: str) -> tuple[float, str]:
 
     if query_norm and query_norm in author_norm:
         return 0.9, "title"
+
+    if query_terms:
+        title_overlap = len(query_terms & title_author_terms) / len(query_terms)
+        if title_overlap >= 1:
+            return 0.96, "title"
+        if title_overlap >= 0.5:
+            return 0.88, "title"
 
     if query_norm and query_norm == genre_norm:
         return 0.86, "genre"
@@ -154,6 +162,28 @@ def suggest_books(db: Session, query: str, limit: int = 10, offset: int = 0):
         .all()
     )
 
+    query_terms = _split_terms(query)
+    if query_terms:
+        token_filters = []
+        for term in query_terms:
+            like = f"%{term}%"
+            token_filters.append(models.Book.title.ilike(like))
+            token_filters.append(models.Book.author.ilike(like))
+
+        for book in (
+            db.query(models.Book)
+            .filter(or_(*token_filters))
+            .limit(fetch_size)
+            .all()
+        ):
+            base_score, match_type = _text_score(book, query)
+            suggestions_by_id[book.id] = _serialize_book(
+                book,
+                _combined_score(base_score, book),
+                match_type,
+                query,
+            )
+
     intent_genres = _intent_genres(query)
     if intent_genres:
         for book in (
@@ -206,11 +236,27 @@ def suggest_books(db: Session, query: str, limit: int = 10, offset: int = 0):
             query,
         )
 
-    ranked = sorted(
+    query_terms = _split_terms(query)
+    ranked_all = sorted(
         suggestions_by_id.values(),
-        key=lambda item: (item["score"], item["rating"] or 0),
+        key=lambda item: (
+            item["score"],
+            query_terms.issubset(_split_terms(item["title"])),
+            -len(_split_terms(item["title"]) - query_terms),
+            item["rating"] or 0,
+            -len(item["title"]),
+        ),
         reverse=True,
     )
+
+    ranked = []
+    seen_books = set()
+    for item in ranked_all:
+        dedupe_key = (_normalize(item["title"]), _normalize(item["author"]))
+        if dedupe_key in seen_books:
+            continue
+        seen_books.add(dedupe_key)
+        ranked.append(item)
 
     page = ranked[offset : offset + limit]
 

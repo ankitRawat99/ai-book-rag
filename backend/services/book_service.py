@@ -13,6 +13,7 @@ from services.data_quality import (
     clean_rating,
     dump_key_points,
     fetch_open_library_metadata,
+    is_low_quality_summary,
     load_key_points,
     normalize_author,
     normalize_image_url,
@@ -28,8 +29,11 @@ def get_all_books(db: Session, genre: str | None = None, limit: int = 80, offset
     return query.order_by(models.Book.rating.desc(), models.Book.title).offset(offset).limit(limit).all()
 
 
-def get_book_count(db: Session):
-    return db.query(models.Book).count()
+def get_book_count(db: Session, genre: str | None = None):
+    query = db.query(models.Book)
+    if genre:
+        query = query.filter(models.Book.genre.ilike(genre))
+    return query.count()
 
 
 def find_book_by_url(db: Session, url: str):
@@ -79,7 +83,7 @@ def ensure_book_quality(db: Session, book: models.Book):
         book.rating = next_rating
         changed = True
 
-    if not book.ai_summary:
+    if not book.ai_summary or is_low_quality_summary(book.ai_summary):
         book.ai_summary = build_summary_text(book)
         changed = True
 

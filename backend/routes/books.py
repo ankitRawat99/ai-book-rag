@@ -29,8 +29,8 @@ def get_books(
 
 
 @router.get("/books/count")
-def get_book_count(db: Session = Depends(get_db)):
-    return {"count": book_service.get_book_count(db)}
+def get_book_count(genre: str | None = None, db: Session = Depends(get_db)):
+    return {"count": book_service.get_book_count(db, genre=genre)}
 
 
 @router.get("/book/{book_id}", response_model=schemas.BookDetail)

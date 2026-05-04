@@ -120,6 +120,34 @@ def add_book_embedding(book_id: int, text: str, metadata: dict | None = None):
     _save_fallback_index(index)
 
 
+def add_book_embeddings(items: list[tuple[int, str, dict]]):
+    if not items:
+        return
+
+    ids = [str(book_id) for book_id, _, _ in items]
+    documents = [text for _, text, _ in items]
+    embeddings = [get_embedding(text) for text in documents]
+    metadatas = [metadata or {} for _, _, metadata in items]
+
+    if collection is not None:
+        collection.upsert(
+            documents=documents,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            ids=ids,
+        )
+        return
+
+    index = _load_fallback_index()
+    for book_id, document, embedding, metadata in zip(ids, documents, embeddings, metadatas):
+        index[book_id] = {
+            "document": document,
+            "embedding": embedding,
+            "metadata": metadata,
+        }
+    _save_fallback_index(index)
+
+
 def search_similar(query: str, n_results: int = 10):
     query_embedding = get_embedding(query)
 

@@ -33,6 +33,15 @@ export function getGenres() {
   return request("/genres");
 }
 
+export function getBookCount({ genre = "" } = {}) {
+  const params = new URLSearchParams();
+  if (genre) {
+    params.set("genre", genre);
+  }
+
+  return request(`/books/count${params.toString() ? `?${params.toString()}` : ""}`);
+}
+
 export function searchBooks({ query, limit = 12, offset = 0 }) {
   const params = new URLSearchParams({
     query,
@@ -41,6 +50,16 @@ export function searchBooks({ query, limit = 12, offset = 0 }) {
   });
 
   return request(`/search?${params.toString()}`);
+}
+
+export function getBookSuggestions({ query, limit = 8 }) {
+  const params = new URLSearchParams({
+    query,
+    limit: String(limit),
+    offset: "0",
+  });
+
+  return request(`/suggestions?${params.toString()}`);
 }
 
 export function askBook({ bookId, question }) {

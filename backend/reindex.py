@@ -1,6 +1,6 @@
 import models
 from ai_engine.vector_store import (
-    add_book_embedding,
+    add_book_embeddings,
     build_book_document,
     build_book_metadata,
     clean_author,
@@ -16,6 +16,7 @@ def rebuild_index():
     try:
         books = db.query(models.Book).all()
 
+        batch = []
         for book in books:
             key = f"{book.title}-{book.author}"
 
@@ -25,12 +26,20 @@ def rebuild_index():
             seen.add(key)
 
             book.author = clean_author(book.author)
-            add_book_embedding(
-                book.id,
-                build_book_document(book),
-                build_book_metadata(book),
+            batch.append(
+                (
+                    book.id,
+                    build_book_document(book),
+                    build_book_metadata(book),
+                )
             )
             indexed += 1
+
+            if len(batch) >= 128:
+                add_book_embeddings(batch)
+                batch = []
+
+        add_book_embeddings(batch)
 
         db.commit()
     finally:

@@ -7,6 +7,86 @@ from urllib.request import Request, urlopen
 
 UNKNOWN_AUTHOR_VALUES = {"", "unknown", "author unavailable", "n/a", "none"}
 BAD_DESCRIPTION_VALUES = {"", "scraped book", "no description available"}
+LOW_QUALITY_SUMMARY_MARKERS = (
+    "compelling ",
+    "notable contribution",
+    "perfect for readers interested",
+    "quality content",
+    "this book explores general themes",
+)
+
+KNOWN_BOOK_INSIGHTS = {
+    "atomic habits": [
+        "shows how tiny behavior changes compound into large results over time",
+        "argues that environment design often beats willpower",
+        "centers habit change on identity: become the kind of person who does the action",
+    ],
+    "pride and prejudice": [
+        "follows Elizabeth Bennet as she judges status, manners, and character in Regency England",
+        "uses romance to examine pride, class pressure, family ambition, and first impressions",
+        "contrasts social performance with the slower work of understanding people clearly",
+    ],
+    "alice's adventures in wonderland": [
+        "sends Alice through a dreamlike world where logic, language, and authority keep shifting",
+        "turns childhood curiosity into encounters with absurd rules and comic disorder",
+        "uses fantasy to question how adults make meaning, manners, and power feel arbitrary",
+    ],
+    "a christmas carol": [
+        "follows Ebenezer Scrooge as three spirits force him to confront greed, memory, and mortality",
+        "argues that generosity and social responsibility can remake a life",
+        "connects personal redemption with compassion for poverty and family hardship",
+    ],
+    "the great gatsby": [
+        "tracks Jay Gatsby's reinvention and obsession with Daisy Buchanan",
+        "shows how wealth, longing, and performance distort the American dream",
+        "contrasts glittering parties with loneliness, carelessness, and moral emptiness",
+    ],
+    "to kill a mockingbird": [
+        "uses Scout Finch's childhood view to reveal racism and injustice in a Southern town",
+        "centers Atticus Finch's defense of Tom Robinson as a lesson in conscience under pressure",
+        "connects empathy with the difficulty of doing what is right in public",
+    ],
+    "1984": [
+        "imagines a surveillance state that controls language, memory, and private thought",
+        "follows Winston Smith's attempt to preserve truth and desire under totalitarian power",
+        "warns that political control becomes absolute when reality itself can be rewritten",
+    ],
+}
+
+GENRE_INSIGHTS = {
+    "Sci-Fi": [
+        "explores how imagined futures expose present-day questions about power, technology, and human choice",
+        "uses speculative settings to test what people value when society changes",
+    ],
+    "Self Help": [
+        "focuses on practical behavior change rather than abstract motivation",
+        "turns personal growth into repeatable actions readers can apply",
+    ],
+    "Business": [
+        "connects decisions, leadership, and execution to real organizational outcomes",
+        "offers frameworks for thinking about work, markets, and management",
+    ],
+    "Romance": [
+        "builds emotional tension through character choices, trust, and vulnerability",
+        "uses relationships to explore identity, timing, and personal change",
+    ],
+    "Fantasy": [
+        "uses invented worlds to make conflict, loyalty, and transformation feel larger than ordinary life",
+        "leans on worldbuilding and quests to test character under pressure",
+    ],
+    "History": [
+        "places people and events in context so causes and consequences are easier to understand",
+        "shows how political, cultural, and personal forces shape the past",
+    ],
+    "Biography": [
+        "examines a life through choices, setbacks, influence, and legacy",
+        "helps readers understand the person behind the public record",
+    ],
+    "Mystery": [
+        "builds suspense through clues, withheld information, and shifting suspicion",
+        "rewards close attention to motive, evidence, and character behavior",
+    ],
+}
 
 
 def fallback_cover(title: str | None = None) -> str:
@@ -75,59 +155,58 @@ def clean_rating(rating: float | int | None, title: str | None, author: str | No
     return round(max(1.0, min(value, 5.0)), 1)
 
 
+def is_low_quality_summary(summary: str | None) -> bool:
+    value = (summary or "").strip().lower()
+    return not value or any(marker in value for marker in LOW_QUALITY_SUMMARY_MARKERS)
+
+
+def _usable_description(description: str | None) -> str:
+    value = (description or "").strip()
+    if not value or value.lower() in BAD_DESCRIPTION_VALUES:
+        return ""
+
+    lower = value.lower()
+    if lower.startswith("open library subject:") and len(value) < 120:
+        return ""
+
+    return value
+
+
+def _first_sentences(text: str, limit: int = 2) -> list[str]:
+    sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
+    return sentences[:limit]
+
+
 def build_summary_text(book) -> str:
-    description = (getattr(book, "description", None) or "").strip()
-    
-    # If we have a good description, use it
-    if description and description.lower() not in BAD_DESCRIPTION_VALUES:
-        # Limit length and ensure quality
-        summary = description[:500].strip()
-        if len(summary) > 100:  # Only use if substantial
-            return summary
-    
-    # Generate meaningful summary from metadata
+    description = _usable_description(getattr(book, "description", None))
     title = getattr(book, "title", "This book")
     author = normalize_author(getattr(book, "author", None), title)
     genre = getattr(book, "genre", None) or "General"
+    
+    known = KNOWN_BOOK_INSIGHTS.get((title or "").strip().lower())
+    if known:
+        return " ".join([
+            f"{title} by {author} {known[0]}.",
+            f"It {known[1]}.",
+            f"Key idea: {known[2]}.",
+        ])
+
+    if description:
+        sentences = _first_sentences(description, limit=3)
+        if sentences:
+            return " ".join(sentences)[:650].strip()
+    
     publish_year = getattr(book, "publish_year", None)
-    rating = getattr(book, "rating", None)
-    
-    # Create a more engaging summary
-    summary_parts = []
-    
-    # Main hook
-    if publish_year:
-        summary_parts.append(f"Published in {publish_year}, {title} by {author} is a compelling {genre.lower()} work.")
-    else:
-        summary_parts.append(f"{title} by {author} is a notable contribution to {genre.lower()} literature.")
-    
-    # Add quality indicator
-    if rating and rating >= 4.0:
-        summary_parts.append(f"Highly regarded by readers with a {rating:.1f}/5 rating,")
-    elif rating and rating >= 3.5:
-        summary_parts.append(f"Well-received with a {rating:.1f}/5 rating,")
-    
-    # Add genre context
-    genre_context = {
-        "Sci-Fi": "this work explores imaginative futures and technological possibilities.",
-        "Self Help": "this book offers practical insights and actionable strategies.",
-        "Business": "this book provides valuable business wisdom and entrepreneurial insights.",
-        "Romance": "this story delves into compelling relationships and emotional connections.",
-        "Fantasy": "this epic tale creates immersive worlds and memorable adventures.",
-        "History": "this work brings historical events and figures to life.",
-        "Biography": "this narrative reveals the life and achievements of remarkable individuals.",
-        "Science": "this book explores scientific concepts and natural phenomena.",
-        "Mystery": "this story weaves together clues and suspenseful revelations.",
-        "Travel": "this work captures cultures and destinations around the globe.",
-    }
-    
-    context = genre_context.get(genre, f"this book explores {genre.lower()} themes in depth.")
-    summary_parts.append(context)
-    
-    # Add audience
-    summary_parts.append(f"Perfect for readers interested in {genre.lower()} and seeking engaging, quality content.")
-    
-    return " ".join(summary_parts)
+    insights = GENRE_INSIGHTS.get(genre, [
+        f"focuses on core {genre.lower()} ideas through its subject and structure",
+        "gives readers a concise path into the book's themes and context",
+    ])
+    year = f" First published in {publish_year}," if publish_year else ""
+    return (
+        f"{year} {title} by {author} is best approached as a {genre.lower()} book that {insights[0]}. "
+        f"It {insights[1]}. "
+        "The available catalog data is limited, so this summary stays grounded in metadata rather than inventing plot details."
+    ).strip()
 
 
 def build_key_points_list(book) -> list[str]:
@@ -136,7 +215,7 @@ def build_key_points_list(book) -> list[str]:
     author = normalize_author(getattr(book, "author", None), title)
     publish_year = getattr(book, "publish_year", None)
     rating = getattr(book, "rating", None)
-    description = (getattr(book, "description", None) or "").strip()
+    description = _usable_description(getattr(book, "description", None))
     
     points = []
     
@@ -163,31 +242,19 @@ def build_key_points_list(book) -> list[str]:
         else:
             points.append(f"Rating: {rating_float:.1f}/5")
     
-    # Key insight from description if available
-    if description and description.lower() not in BAD_DESCRIPTION_VALUES:
-        # Extract first meaningful sentence
-        sentences = [s.strip() for s in description.split('.') if s.strip()]
-        if sentences:
-            first_sentence = sentences[0]
-            if len(first_sentence) > 20 and len(first_sentence) < 150:
-                points.append(f"Summary: {first_sentence}")
+    known = KNOWN_BOOK_INSIGHTS.get((title or "").strip().lower())
+    if known:
+        points.extend(known)
+        return points[:5]
+
+    if description:
+        for sentence in _first_sentences(description, limit=2):
+            if 20 <= len(sentence) <= 180:
+                points.append(sentence.rstrip("."))
     
     # Genre-specific insights
-    genre_insights = {
-        "Sci-Fi": "Explores futuristic themes and imaginative worlds",
-        "Self Help": "Offers practical strategies for personal growth",
-        "Business": "Provides entrepreneurial wisdom and business insights",
-        "Romance": "Features compelling emotional and relational narratives",
-        "Fantasy": "Contains rich worldbuilding and epic storytelling",
-        "History": "Documents historical events and periods",
-        "Biography": "Chronicles a remarkable life or achievement",
-        "Science": "Explains scientific concepts and discoveries",
-        "Mystery": "Delivers suspenseful, plot-driven narrative",
-        "Travel": "Captures global cultures and destinations",
-    }
-    
-    if genre in genre_insights and len(points) < 5:
-        points.append(genre_insights[genre])
+    if genre in GENRE_INSIGHTS and len(points) < 5:
+        points.extend(GENRE_INSIGHTS[genre])
     
     return points[:5]
 

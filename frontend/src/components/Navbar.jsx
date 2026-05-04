@@ -32,61 +32,32 @@ export default function Navbar() {
           : "border-b border-gray-200/40 dark:border-gray-700/40 bg-white/50 dark:bg-[#1a1a1a]/50 backdrop-blur-sm"
       }`}
     >
-      <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3 sm:px-8 lg:px-10">
+      <nav className="w-full px-4 sm:px-6 md:px-8 flex items-center justify-between gap-4 py-3">
         <Link
           to="/"
           className="flex shrink-0 items-center gap-2.5 font-black text-gray-900 dark:text-gray-100 hover:opacity-80 transition-opacity"
         >
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 shadow-lg hover:shadow-xl transition-shadow">
-            <BookOpen className="h-5 w-5" />
-          </span>
+          <img 
+            src="/ibook-logo.svg" 
+            alt="IBooK Logo" 
+            className="h-10 w-10 hover:scale-105 transition-transform drop-shadow-sm" 
+          />
           <span className="hidden text-lg sm:inline">
-            Librarian RAG
+            IBooK
           </span>
         </Link>
 
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowGenres(!showGenres);
-                setShowSettings(false);
-              }}
-              className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] flex items-center gap-2 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-            >
-              <Filter className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">Genres</span>
-            </button>
-            
-            {showGenres && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShowGenres(false)}
-                />
-                <div className="absolute right-0 mt-2 w-56 max-h-96 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] shadow-lg z-50">
-                  <div className="p-2">
-                    <Link
-                      to="/"
-                      onClick={() => setShowGenres(false)}
-                      className="block px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
-                    >
-                      All Genres
-                    </Link>
-                    {genres.map((genre) => (
-                      <Link
-                        key={genre}
-                        to={`/?genre=${encodeURIComponent(genre)}`}
-                        onClick={() => setShowGenres(false)}
-                        className="block px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
-                      >
-                        {genre}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
+          <div className="hidden md:flex items-center gap-6 mr-4">
+            <Link to="/" className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white transition-colors">
+              Home
+            </Link>
+            <Link to="/#books-grid" className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white transition-colors">
+              Books
+            </Link>
+            <Link to="/" className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white transition-colors">
+              Authors
+            </Link>
           </div>
 
           <div className="relative">
