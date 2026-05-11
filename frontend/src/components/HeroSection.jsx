@@ -35,14 +35,14 @@ export default function HeroSection() {
         ))}
       </div>
 
-      <div className="w-full px-4 sm:px-6 md:px-8 relative py-12 lg:py-16">
-        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_520px] lg:gap-12">
+      <div className="w-full px-5 sm:px-8 md:px-10 relative py-12 lg:py-16">
+        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_520px] lg:gap-6">
           <div className="flex flex-col justify-center py-8 section-enter">
             <p className="mb-5 w-fit rounded-full border border-teal-500/30 bg-teal-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-teal-700 dark:text-teal-300">
               AI-powered reading discovery
             </p>
             <div className="space-y-4">
-              <h1 className="hero-shimmer max-w-2xl text-5xl font-black leading-[1.1] tracking-tight sm:text-6xl lg:text-7xl">
+              <h1 className="hero-shimmer max-w-3xl text-6xl font-black leading-[1.05] tracking-tight sm:text-7xl lg:text-8xl">
                 Discover your next
                 <span className="block">favorite book</span>
               </h1>

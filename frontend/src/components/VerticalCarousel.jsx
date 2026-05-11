@@ -6,6 +6,8 @@ export default function VerticalCarousel({ books = [] }) {
   const [scrollPosition, setScrollPosition] = useState(0);
 
   const displayBooks = [...books, ...books, ...books];
+  const cardHeight = 180;
+  const maxScroll = books.length * cardHeight;
   
   const column1 = displayBooks.filter((_, i) => i % 2 === 0);
   const column2 = displayBooks.filter((_, i) => i % 2 === 1);
@@ -13,8 +15,6 @@ export default function VerticalCarousel({ books = [] }) {
   useEffect(() => {
     const interval = setInterval(() => {
       setScrollPosition((prev) => {
-        const cardHeight = 180;
-        const maxScroll = books.length * cardHeight;
         const newPos = prev + 0.5;
         return newPos >= maxScroll ? 0 : newPos;
       });
@@ -96,7 +96,7 @@ export default function VerticalCarousel({ books = [] }) {
           <div
             className="will-change-transform"
             style={{
-              transform: `translateY(-${scrollPosition + 90}px)`,
+              transform: `translateY(-${maxScroll - scrollPosition + 90}px)`,
               transition: 'transform 0.02s linear',
             }}
           >
